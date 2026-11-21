@@ -58,7 +58,12 @@ def generate_groq(question, passages, api_key, structured=False, periods=None):
         payload["response_format"] = {"type": "json_object"}
     req = urllib.request.Request(
         ENDPOINT, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (compatible; FOMC-RAG-Lab/1.0)",
+        },
         method="POST",
     )
     start = perf_counter()

@@ -1,0 +1,5 @@
+
+# Conserver les octets originaux des fichiers verifies par SHA-256
+data/processed/chunks.jsonl -text
+indexes/bm25/tokens.jsonl -text
+indexes/dense/chunk_ids.json -text

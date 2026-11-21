@@ -368,12 +368,15 @@ with st.sidebar:
     st.selectbox("Passages finaux après reranking", [5, 6], key="context_k")
     st.caption("20 candidats reclassés, puis 5 ou 6 passages transmis au LLM.")
     st.markdown("### Language model")
-    st.toggle("Enable Qwen response", key="use_llm")
     if groq_key():
-        st.caption("Cloud generation: Groq / Qwen")
+        # Cloud only: no fragile session toggle; the presence of the server-side
+        # secret enables Qwen generation automatically for every search.
+        st.session_state["use_llm"] = True
+        st.caption("Cloud generation: Groq / Qwen — enabled")
+        st.caption("Evidence audit can be enabled after verifying the first answer.")
     else:
+        st.toggle("Enable Qwen response", key="use_llm")
         st.caption("Local generation: Ollama (no Groq secret found)")
-    if not groq_key():
         st.text_input("Ollama model", key="model_name", disabled=not st.session_state["use_llm"])
     st.toggle("Structured answer & evidence audit", key="structured_generation", disabled=not st.session_state["use_llm"])
     st.markdown('<div class="sidebar-note">Temporal mode uses Hybrid RRF + ColBERT for each detected period. Classic settings are preserved separately.</div>', unsafe_allow_html=True)

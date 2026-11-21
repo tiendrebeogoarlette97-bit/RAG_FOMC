@@ -64,13 +64,14 @@ def main():
             setattr(module, original_name, getattr(module, name))
         original = getattr(module, original_name)
         setattr(module, name, partial(original, endpoint=endpoint) if endpoint else original)
+    groq_available = bool(setting('GROQ_API_KEY'))
     if endpoint:
         st.session_state.setdefault('model_name', model)
-    else:
-        st.session_state['use_llm'] = False
+    # Never overwrite the user's use_llm toggle on each Streamlit rerun.
+    # Groq provides cloud generation even without an Ollama endpoint.
     runpy.run_path(str(ROOT / 'app/streamlit_app.py'), run_name='__main__')
-    if not endpoint:
-        st.warning('Configure OLLAMA_ENDPOINT dans les secrets pour activer Qwen. Le serveur Cloud ne peut pas utiliser Ollama sur ton ordinateur.')
+    if not endpoint and not groq_available:
+        st.warning('Pour activer Qwen sur Streamlit Cloud, configure GROQ_API_KEY dans les Secrets.')
 
 
 if __name__ == '__main__':

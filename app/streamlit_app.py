@@ -30,6 +30,11 @@ from temporal_retrieval import detect_periods, retrieve_temporal  # noqa: E402
 from coverage_guard import generate_with_coverage, build_sections  # noqa: E402
 from evidence_audit import audit_evidence  # noqa: E402
 
+APP_DIR = ROOT / "app"
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+from groq_generation import generate_groq  # noqa: E402
+
 st.set_page_config(
     page_title="FOMC RAG Lab",
     page_icon="🔎",
@@ -259,12 +264,21 @@ def set_example(example: str) -> None:
     st.session_state["draft_question"] = example
 
 
+def groq_key() -> str:
+    """Read Streamlit's server-side secret without exposing it to users."""
+    import os
+    try:
+        return str(st.secrets.get("GROQ_API_KEY", "") or os.getenv("GROQ_API_KEY", ""))
+    except (FileNotFoundError, OSError):
+        return os.getenv("GROQ_API_KEY", "")
+
+
 def launch() -> None:
     question = st.session_state.get("question", "").strip()
     if not question:
         st.error("Please enter a question before starting research.")
         return
-    if st.session_state["use_llm"] and not st.session_state["model_name"].strip():
+    if st.session_state["use_llm"] and not groq_key() and not st.session_state["model_name"].strip():
         st.error("Please select a local Ollama model.")
         return
     st.session_state["draft_question"] = question
@@ -299,7 +313,14 @@ def launch() -> None:
                 )
         if st.session_state["use_llm"]:
             with st.spinner("Qwen is composing an evidence-grounded answer..."):
-                if st.session_state["structured_generation"]:
+                if groq_key():
+                    generation = generate_groq(
+                        question, passages,
+                        api_key=groq_key(),
+                        structured=st.session_state["structured_generation"],
+                        periods=periods if mode == "temporal" else [],
+                    )
+                elif st.session_state["structured_generation"]:
                     generation = generate_with_coverage(
                         question, passages,
                         model=st.session_state["model_name"].strip(),
@@ -346,9 +367,14 @@ with st.sidebar:
         st.session_state['context_k'] = 6
     st.selectbox("Passages finaux après reranking", [5, 6], key="context_k")
     st.caption("20 candidats reclassés, puis 5 ou 6 passages transmis au LLM.")
-    st.markdown("### Local language model")
+    st.markdown("### Language model")
     st.toggle("Enable Qwen response", key="use_llm")
-    st.text_input("Ollama model", key="model_name", disabled=not st.session_state["use_llm"])
+    if groq_key():
+        st.caption("Cloud generation: Groq / Qwen")
+    else:
+        st.caption("Local generation: Ollama (no Groq secret found)")
+    if not groq_key():
+        st.text_input("Ollama model", key="model_name", disabled=not st.session_state["use_llm"])
     st.toggle("Structured answer & evidence audit", key="structured_generation", disabled=not st.session_state["use_llm"])
     st.markdown('<div class="sidebar-note">Temporal mode uses Hybrid RRF + ColBERT for each detected period. Classic settings are preserved separately.</div>', unsafe_allow_html=True)
     st.markdown("### Corpus")
@@ -407,7 +433,7 @@ if run:
     if run.get("abstained"):
         st.warning("The model reported insufficient evidence.")
     if run.get("model"):
-        st.caption("Local generation · " + str(run["model"]))
+        st.caption("Generation model · " + str(run["model"]))
     st.download_button(
         "Export answer & metadata (.json)", dumps(run),
         file_name="fomc_rag_result.json", mime="application/json",
@@ -429,12 +455,12 @@ if run:
             p1.metric("Model setup",f"{timing.get('assets_s',0):.2f} s")
             p2.metric("Retrieval",f"{timing.get('retrieval_s',0):.2f} s")
             p3.metric("Reranking",f"{timing.get('reranking_s',0):.2f} s")
-        p4.metric("Qwen generation",f"{timing.get('generation_s',0):.2f} s" if run.get("model") else "Disabled")
+        p4.metric("LLM generation",f"{timing.get('generation_s',0):.2f} s" if run.get("model") else "Disabled")
         st.markdown(f"**Total time: {timing.get('total_s',0):.2f} seconds**")
         gen=run.get("generation_timing",{})
         if gen and run.get("model"):
             st.dataframe([{"Load (s)":gen.get("load_s"),"Prompt processing (s)":gen.get("prompt_eval_s"),"Generation (s)":gen.get("eval_s"),"Input tokens":gen.get("prompt_tokens"),"Output tokens":gen.get("generated_tokens")}],hide_index=True,use_container_width=True)
-            st.caption("Ollama internal durations are included in generation wall time.")
+            st.caption("Generation times are reported when available.")
 
     st.markdown('<div class="rule"></div>', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Explore the research workflow</div>', unsafe_allow_html=True)
